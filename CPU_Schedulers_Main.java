@@ -107,17 +107,47 @@ class SJFScheduler implements Scheduler {
         }
     }
 
-    @Override
-    public void run() {
-        List<String> executionOrder = new ArrayList<>();
-        // TODO: Implement Preemptive SJF logic here
-        // Update:
-        // - remainingTime
-        // - completionTime
-        // - executionOrder
-        // - quantumHistory if Quantum changes
-        result = ResultCalculator.calculate(processes, executionOrder, quantumHistory);
+@Override
+public void run() {
+    List<String> executionOrder = new ArrayList<>();
+
+    int currentTime = 0;
+    int completed = 0;
+    int n = processes.size();
+
+    while (completed < n) {
+
+        Process shortest = null;
+        int minRemaining = Integer.MAX_VALUE;
+
+        for (Process p : processes) {
+            if (p.getArrivalTime() <= currentTime &&
+                p.getRemainingTime() > 0 &&
+                p.getRemainingTime() < minRemaining) {
+
+                minRemaining = p.getRemainingTime();
+                shortest = p;
+            }
+        }
+
+        if (shortest == null) {
+            currentTime++;
+            continue;
+        }
+
+        executionOrder.add(shortest.getName());
+        shortest.setRemainingTime(shortest.getRemainingTime() - 1);
+        currentTime++;
+
+        if (shortest.getRemainingTime() == 0) {
+            shortest.setCompletionTime(currentTime);
+            completed++;
+        }
     }
+
+    result = ResultCalculator.calculate(processes, executionOrder, quantumHistory);
+}
+
 
     @Override
     public SchedulerResult getResult() {
@@ -250,7 +280,8 @@ public class CPU_Schedulers_Main {
         }
 
         // Example: running Round Robin Scheduler
-        Scheduler scheduler = new RRScheduler(processes, 1);
+        Scheduler scheduler = new SJFScheduler(processes);
+
         scheduler.run();
 
         SchedulerResult result = scheduler.getResult();
@@ -266,3 +297,4 @@ public class CPU_Schedulers_Main {
         }
     }
 }
+
