@@ -1,4 +1,3 @@
-
 package com.mycompany.cpu_schedulers_main;
 
 import java.util.*;
@@ -97,15 +96,18 @@ class ResultCalculator {
 // --------- Preemptive SJF Scheduler ---------
 class SJFScheduler implements Scheduler {
     private List<Process> processes;
+    private int contextSwitch;
     private SchedulerResult result;
     private Map<String, List<Integer>> quantumHistory = new HashMap<>();
 
-    public SJFScheduler(List<Process> processes) {
+    public SJFScheduler(List<Process> processes, int contextSwitch) {
         this.processes = processes;
+        this.contextSwitch = contextSwitch;
         for(Process p : processes){
             quantumHistory.put(p.getName(), new ArrayList<>());
         }
     }
+
 
 @Override
 public void run() {
@@ -115,35 +117,44 @@ public void run() {
     int completed = 0;
     int n = processes.size();
 
-    while (completed < n) {
+    Process lastProcess = null;
 
-        Process shortest = null;
-        int minRemaining = Integer.MAX_VALUE;
+while (completed < n) {
 
-        for (Process p : processes) {
-            if (p.getArrivalTime() <= currentTime &&
-                p.getRemainingTime() > 0 &&
-                p.getRemainingTime() < minRemaining) {
+    Process shortest = null;
+    int minRemaining = Integer.MAX_VALUE;
 
-                minRemaining = p.getRemainingTime();
-                shortest = p;
-            }
-        }
+    for (Process p : processes) {
+        if (p.getArrivalTime() <= currentTime &&
+            p.getRemainingTime() > 0 &&
+            p.getRemainingTime() < minRemaining) {
 
-        if (shortest == null) {
-            currentTime++;
-            continue;
-        }
-
-        executionOrder.add(shortest.getName());
-        shortest.setRemainingTime(shortest.getRemainingTime() - 1);
-        currentTime++;
-
-        if (shortest.getRemainingTime() == 0) {
-            shortest.setCompletionTime(currentTime);
-            completed++;
+            minRemaining = p.getRemainingTime();
+            shortest = p;
         }
     }
+
+    if (shortest == null) {
+        currentTime++;
+        continue;
+    }
+
+    // 👉 context switch
+    if (lastProcess != null && lastProcess != shortest) {
+        currentTime += contextSwitch;
+    }
+
+    executionOrder.add(shortest.getName());
+    shortest.setRemainingTime(shortest.getRemainingTime() - 1);
+    currentTime++;
+
+    if (shortest.getRemainingTime() == 0) {
+        shortest.setCompletionTime(currentTime);
+        completed++;
+    }
+
+    lastProcess = shortest;
+}
 
     result = ResultCalculator.calculate(processes, executionOrder, quantumHistory);
 }
@@ -171,17 +182,74 @@ class RRScheduler implements Scheduler {
         }
     }
 
-    @Override
-    public void run() {
-        List<String> executionOrder = new ArrayList<>();
-        // TODO: Implement Round Robin logic here
-        // Update:
-        // - remainingTime
-        // - completionTime
-        // - executionOrder
-        // - quantumHistory if Quantum changes
-        result = ResultCalculator.calculate(processes, executionOrder, quantumHistory);
+   @Override
+public void run() {
+    List<String> executionOrder = new ArrayList<>();
+
+    // ترتيب حسب arrival time
+    processes.sort(Comparator.comparingInt(Process::getArrivalTime));
+
+    Queue<Process> readyQueue = new LinkedList<>();
+
+    int currentTime = 0;
+    int completed = 0;
+    int n = processes.size();
+    int index = 0;
+
+    Process lastProcess = null;
+
+    while (completed < n) {
+
+        
+        while (index < n && processes.get(index).getArrivalTime() <= currentTime) {
+            readyQueue.add(processes.get(index));
+            index++;
+        }
+
+        if (readyQueue.isEmpty()) {
+            currentTime++;
+            continue;
+        }
+
+        Process current = readyQueue.poll();
+
+       
+        if (lastProcess != null && lastProcess != current) {
+            currentTime += contextSwitchingTime;
+        }
+
+        int execTime = Math.min(current.getQuantum(), current.getRemainingTime());
+
+       
+        for (int i = 0; i < execTime; i++) {
+            executionOrder.add(current.getName());
+            current.setRemainingTime(current.getRemainingTime() - 1);
+            currentTime++;
+
+          
+            while (index < n && processes.get(index).getArrivalTime() <= currentTime) {
+                readyQueue.add(processes.get(index));
+                index++;
+            }
+
+            if (current.getRemainingTime() == 0)
+                break;
+        }
+
+       
+        if (current.getRemainingTime() == 0) {
+            current.setCompletionTime(currentTime);
+            completed++;
+        } else {
+            readyQueue.add(current);
+        }
+
+        lastProcess = current;
     }
+
+    result = ResultCalculator.calculate(processes, executionOrder, quantumHistory);
+}
+
 
     @Override
     public SchedulerResult getResult() {
@@ -255,46 +323,63 @@ class AGScheduler implements Scheduler {
 // ================= Main for User Input =================
 public class CPU_Schedulers_Main {
     public static void main(String[] args) {
+
         Scanner sc = new Scanner(System.in);
         List<Process> processes = new ArrayList<>();
 
+        // ===== Inputs زي test case الدكتور =====
+        System.out.print("Enter Context Switching Time: ");
+        int contextSwitch = sc.nextInt();
+
+        System.out.print("Enter rrQuantum: ");
+        int rrQuantum = sc.nextInt();
+
+        System.out.print("Enter agingInterval: ");
+        int agingInterval = sc.nextInt();
+
         System.out.print("Enter number of processes: ");
         int n = sc.nextInt();
-        sc.nextLine(); // consume newline
+        sc.nextLine();
 
-        for(int i = 0; i < n; i++){
-            System.out.println("Process " + (i+1) + ":");
+        for (int i = 0; i < n; i++) {
+            System.out.println("Process " + (i + 1));
+
             System.out.print("Name: ");
             String name = sc.nextLine();
+
             System.out.print("Arrival Time: ");
             int at = sc.nextInt();
+
             System.out.print("Burst Time: ");
             int bt = sc.nextInt();
+
             System.out.print("Priority: ");
             int pr = sc.nextInt();
-            System.out.print("Quantum: ");
-            int q = sc.nextInt();
+
             sc.nextLine(); // consume newline
 
-            processes.add(new Process(name, at, bt, pr, q));
+           
+            processes.add(new Process(name, at, bt, pr, rrQuantum));
         }
 
-        // Example: running Round Robin Scheduler
-        Scheduler scheduler = new SJFScheduler(processes);
+        Scheduler scheduler = new RRScheduler(processes, contextSwitch);
 
         scheduler.run();
 
         SchedulerResult result = scheduler.getResult();
-        System.out.println("Execution Order: " + result.getExecutionOrder());
-        System.out.println("Waiting Times: " + result.getWaitingTimes());
-        System.out.println("Turnaround Times: " + result.getTurnaroundTimes());
-        System.out.println("Average WT: " + result.getAverageWaitingTime());
-        System.out.println("Average TAT: " + result.getAverageTurnaroundTime());
 
-        System.out.println("\nQuantum History:");
-        for(String name : result.getQuantumHistory().keySet()){
-            System.out.println(name + ": " + result.getQuantumHistory().get(name));
-        }
+        // ===== Output =====
+        System.out.println("\nExecution Order:");
+        System.out.println(result.getExecutionOrder());
+
+        System.out.println("\nWaiting Times:");
+        System.out.println(result.getWaitingTimes());
+
+        System.out.println("\nTurnaround Times:");
+        System.out.println(result.getTurnaroundTimes());
+
+        System.out.println("\nAverage Waiting Time: " + result.getAverageWaitingTime());
+        System.out.println("Average Turnaround Time: " + result.getAverageTurnaroundTime());
     }
 }
 
